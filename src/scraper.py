@@ -1,32 +1,202 @@
+from pathlib import Path
+import json
+
 from telethon import TelegramClient
 from telegram_client import client
 from config import PHONE_NUMBER
 
+import asyncio
+import logging
+from datetime import datetime
 
-# async def main():
-#     # Connect to Telegram
-#     await client.start(phone=PHONE_NUMBER)
+from telethon.errors import FloodWaitError
 
-#     print("Successfully connected to Telegram!")
 
-#     # Display your own account information
-#     me = await client.get_me()
 
-#     print(f"Logged in as: {me.first_name}")
-#     print(f"Username: {me.username}")
-#     print(f"Phone: {me.phone}")
+# =====================================================
+# Telegram channels to scrape
+# Replace these with the actual channel usernames
+# =====================================================
+
+CHANNELS = [
+    "CheMed123",
+    # "lobelia4cosmetics",
+    # "tikvahpharma",
+]
+
+
+# =====================================================
+# Logging Configuration
+# =====================================================
+
+Path("logs").mkdir(exist_ok=True)
+
+logging.basicConfig(
+    filename="logs/scraper.log",
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+)
+
+logger = logging.getLogger(__name__)
+
+
+# =====================================================
+# Download Image
+# =====================================================
+
+async def download_image(message, channel_name):
+    """
+    Download the image from a Telegram message.
+    Returns the image path or None.
+    """
+
+    if not message.photo:
+        return None
+
+    image_dir = Path("../data/raw/images") / channel_name
+    image_dir.mkdir(parents=True, exist_ok=True)
+
+    image_path = image_dir / f"{message.id}.jpg"
+
+    await client.download_media(
+        message,
+        file=image_path
+    )
+
+    return str(image_path)
+
+
+# =====================================================
+# Scrape One Channel
+# =====================================================
+
+async def scrape_channel(channel_name):
+    """
+    Scrape all messages from a Telegram channel.
+    """
+
+    logger.info(f"Scraping channel: {channel_name}")
+
+    messages = []
+
+    async for message in client.iter_messages(channel_name):
+
+        try:
+
+            image_path = await download_image(
+                message,
+                channel_name
+            )
+
+            # Preserve original Telegram structure
+            raw_message = message.to_dict()
+
+            # Add our own metadata
+            raw_message["image_path"] = image_path
+            raw_message["scraped_at"] = datetime.now().isoformat()
+
+            messages.append(raw_message)
+
+        except FloodWaitError as e:
+
+            logger.warning(
+                f"Rate limit reached. Waiting {e.seconds} seconds..."
+            )
+
+            await asyncio.sleep(e.seconds)
+
+        except Exception as e:
+
+            logger.exception(
+                f"Failed to process message {message.id}: {e}"
+            )
+
+    logger.info(
+        f"{channel_name}: {len(messages)} messages scraped."
+    )
+
+    return messages
+
+
+# =====================================================
+# Save JSON
+# =====================================================
+
+def save_json(channel_name, messages):
+    """
+    Save scraped messages into the partitioned data lake.
+    """
+
+    scrape_date = datetime.now().strftime("%Y-%m-%d")
+
+    output_dir = (
+        Path("../data/raw/telegram_messages")
+        / scrape_date
+    )
+
+    output_dir.mkdir(
+        parents=True,
+        exist_ok=True
+    )
+
+    output_file = output_dir / f"{channel_name}.json"
+
+    with open(
+        output_file,
+        "w",
+        encoding="utf-8"
+    ) as f:
+
+        json.dump(
+            messages,
+            f,
+            indent=4,
+            ensure_ascii=False,
+            default=str
+        )
+
+    logger.info(
+        f"Saved {len(messages)} messages to {output_file}"
+    )
+
+
+# =====================================================
+# Main
+# =====================================================
 
 async def main():
+
+    logger.info("Connecting to Telegram...")
+
     await client.start(phone=PHONE_NUMBER)
 
-    channel = "@chemed123"   
+    logger.info("Successfully connected.")
 
-    async for message in client.iter_messages(channel, limit=5):
-        print("------------------------")
-        print("ID:", message.id)
-        print("Date:", message.date)
-        print("Text:", message.text)
+    for channel in CHANNELS:
+
+        try:
+
+            messages = await scrape_channel(channel)
+
+            save_json(
+                channel,
+                messages
+            )
+
+        except Exception as e:
+
+            logger.exception(
+                f"Error scraping {channel}: {e}"
+            )
+
+    logger.info("Scraping completed.")
 
 
-with client:
-    client.loop.run_until_complete(main())
+# =====================================================
+# Entry Point
+# =====================================================
+
+if __name__ == "__main__":
+
+    with client:
+        client.loop.run_until_complete(main())
