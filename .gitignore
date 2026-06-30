@@ -6,3 +6,5 @@ data
 src/__pycache__
 
 telegram_session.session
+
+logs
