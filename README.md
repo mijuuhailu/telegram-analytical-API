@@ -1,65 +1,140 @@
-# Telegram Data Scraping and Collection
+# Telegram Medical Data Platform
 
-## Objective
+## Overview
 
-Build a data collection pipeline that extracts messages and images from public Telegram channels and stores them in a raw data lake for later processing.
+This project is an end-to-end data engineering pipeline that collects, processes, enriches, and exposes analytical insights from public Ethiopian medical Telegram channels.
 
-## What Was Implemented
+The pipeline extracts Telegram messages and images, stores them in a raw data lake, transforms the data into a PostgreSQL data warehouse using dbt, enriches image data with YOLO object detection, exposes analytics through a FastAPI application, and orchestrates the workflow using Dagster.
 
-* Connected to the Telegram API using **Telethon**.
-* Scraped messages from public Telegram channels.
-* Extracted raw message data while preserving the original Telegram API structure.
-* Downloaded images from messages containing photos.
-* Stored images in a structured directory:
+## Technologies
 
-  ```
-  data/raw/images/{channel_name}/{message_id}.jpg
-  ```
-* Stored raw message data as JSON files using a date-partitioned data lake structure:
-
-  ```
-  data/raw/telegram_messages/YYYY-MM-DD/{channel_name}.json
-  ```
-* Implemented logging to record scraping activities and errors.
-* Added error handling, including Telegram rate-limit (`FloodWaitError`) handling.
+* Python
+* Telethon
+* PostgreSQL
+* dbt
+* YOLOv8 (Ultralytics)
+* FastAPI
+* SQLAlchemy
+* Dagster
 
 ## Project Structure
 
 ```
-medical-data-platform/
+telegram-analytical-API/
 │
+├── api/                    # FastAPI application
 ├── data/
-│   └── raw/
-│       ├── images/
-│       └── telegram_messages/
-│
+│   ├── raw/
+│   │   ├── images/
+│   │   └── telegram_messages/
+│   └── yolo_results.csv
 ├── logs/
-│   └── scraper.log
-│
-├── src/
-│   ├── config.py
-│   ├── telegram_client.py
-│   └── scraper.py
-│
-├── .env
-├── .gitignore
-└── requirements.txt
+├── medical_warehouse/      # dbt project
+├── src/                    # Scraper, loader and YOLO scripts
+├── pipeline.py             # Dagster pipeline
+├── schedule.py             # Dagster schedule
+├── requirements.txt
+└── README.md
 ```
 
-## Technologies Used
+## Pipeline Workflow
 
-* Python
-* Telethon
-* python-dotenv
-* JSON
-* Logging
+1. Scrape messages and images from Telegram channels.
+2. Store raw JSON files and images in the data lake.
+3. Load raw data into PostgreSQL.
+4. Transform the data into a star schema using dbt.
+5. Enrich image data using YOLO object detection.
+6. Expose analytical endpoints with FastAPI.
+7. Automate the pipeline using Dagster.
 
-## Output
+## Data Warehouse
 
-After running the scraper:
+### Raw Layer
 
-* Raw Telegram messages are stored as JSON files.
-* Images are downloaded and organized by channel.
-* Scraping logs are written to `logs/scraper.log`.
+* `raw.telegram_messages`
+* `raw.yolo_detections`
 
-This raw data serves as the input for **Task 2**, where it will be loaded into PostgreSQL and transformed into a dimensional data warehouse using dbt.
+### Staging Layer
+
+* `stg_telegram_messages`
+
+### Mart Layer
+
+* `dim_channels`
+* `dim_dates`
+* `fct_messages`
+* `fct_image_detections`
+
+## API Endpoints
+
+* `GET /api/reports/top-products`
+* `GET /api/channels/{channel_name}/activity`
+* `GET /api/search/messages`
+* `GET /api/reports/visual-content`
+
+API documentation is available at:
+
+```
+http://localhost:8000/docs
+```
+
+## Running the Project
+
+### 1. Install dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+### 2. Scrape Telegram data
+
+```bash
+python src/scraper.py
+```
+
+### 3. Load data into PostgreSQL
+
+```bash
+python src/load_to_postgres.py
+```
+
+### 4. Run dbt transformations
+
+```bash
+cd medical_warehouse
+dbt run
+dbt test
+```
+
+### 5. Run YOLO detection
+
+```bash
+python src/yolo_detect.py
+```
+
+### 6. Start the API
+
+```bash
+uvicorn api.main:app --reload
+```
+
+### 7. Run the pipeline
+
+```bash
+dagster dev -f pipeline.py
+```
+
+## Features
+
+* Telegram data scraping
+* Raw data lake storage
+* PostgreSQL data warehouse
+* Star schema dimensional modeling
+* dbt transformations and data quality tests
+* YOLO image enrichment
+* FastAPI analytical API
+* Dagster pipeline orchestration
+
+## Author
+
+Developed as part of a Data Engineering project for building an analytical data platform using modern ELT and machine learning techniques.
