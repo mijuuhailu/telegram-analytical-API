@@ -1,7 +1,7 @@
 myenv
 .env
 data
-
+medical_warehouse
 
 src/__pycache__
 
