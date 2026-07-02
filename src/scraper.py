@@ -13,16 +13,12 @@ from telethon.errors import FloodWaitError
 
 
 
-# =====================================================
-# Telegram channels to scrape
-# Replace these with the actual channel usernames
-# =====================================================
 
-CHANNELS = [
-    "CheMed123",
-    # "lobelia4cosmetics",
-    # "tikvahpharma",
-]
+CHANNELS = {
+    "CheMed123": 100,
+    "lobelia4cosmetics": 100,
+    "TIKVAHPHARMA": 100,
+}
 
 
 # =====================================================
@@ -70,7 +66,7 @@ async def download_image(message, channel_name):
 # Scrape One Channel
 # =====================================================
 
-async def scrape_channel(channel_name):
+async def scrape_channel(channel_name, limit=100):
     """
     Scrape all messages from a Telegram channel.
     """
@@ -79,7 +75,7 @@ async def scrape_channel(channel_name):
 
     messages = []
 
-    async for message in client.iter_messages(channel_name):
+    async for message in client.iter_messages(channel_name, limit=limit):
 
         try:
 
@@ -92,8 +88,10 @@ async def scrape_channel(channel_name):
             raw_message = message.to_dict()
 
             # Add our own metadata
+            raw_message["channel_name"] = channel_name
             raw_message["image_path"] = image_path
             raw_message["scraped_at"] = datetime.now().isoformat()
+            
 
             messages.append(raw_message)
 
@@ -172,21 +170,17 @@ async def main():
 
     logger.info("Successfully connected.")
 
-    for channel in CHANNELS:
+    for channel_name, limit in CHANNELS.items():
 
         try:
 
-            messages = await scrape_channel(channel)
-
-            save_json(
-                channel,
-                messages
-            )
+            messages = await scrape_channel(channel_name, limit=limit)
+            save_json(channel_name, messages)
 
         except Exception as e:
 
             logger.exception(
-                f"Error scraping {channel}: {e}"
+                f"Error scraping {channel_name}: {e}"
             )
 
     logger.info("Scraping completed.")
